@@ -1,0 +1,18 @@
+version: '2'
+services:
+  mongodb:
+    image: mongo
+    volumes:
+      - ./data/mongodb:/data
+    ports:
+      - 27018:27017
+  metabase:
+    image: metabase/metabase
+    environment:
+      - MB_DB_FILE=/data/metabase.db
+    volumes:
+      - ./data/metabase:/data
+    ports:
+      - 3000:3000
+    links:
+      - mongodb

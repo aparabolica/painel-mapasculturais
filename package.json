@@ -1,0 +1,20 @@
+{
+  "name": "painel-mapasculturais",
+  "version": "0.0.1",
+  "description": "Ferramenta de análise de dados do Mapas Culturais",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aparabolica/painel-mapasculturais.git"
+  },
+  "scripts": {
+    "update": "REPLAY=bloody node update-data.js"
+  },
+  "author": "Vitor George <vitor.george@aparabolica.com.br>",
+  "license": "MIT",
+  "dependencies": {
+    "async": "^2.5.0",
+    "mongodb": "^2.2.30",
+    "replay": "^2.1.2",
+    "request": "^2.81.0"
+  }
+}
