@@ -1,18 +1,10 @@
 const replay = require("replay");
-const request = require("request");
+var request = require("request").defaults({ jar: true });
 const async = require("async");
 const elementTypes = ["agent", "space", "project", "event"];
 
-const installs = [
-  {
-    name: "ceara",
-    url: "http://mapa.cultura.ce.gov.br/api/"
-  },
-  {
-    name: "spcultura",
-    url: "http://spcultura.prefeitura.sp.gov.br/api/"
-  }
-];
+const installs = require("./config.json").installs;
+
 const mongodbConnectionString = "mongodb://localhost:27018/mapasculturais";
 const limitPerPage = 300;
 
@@ -41,7 +33,31 @@ mongo.connect(mongodbConnectionString, function(err, db) {
  * Init import
  */
 function runImport(doneRunImport) {
-  async.eachSeries(installs, fetchInstallData, doneRunImport);
+  async.eachSeries(
+    installs,
+    function(install, doneInstall) {
+      // get install credentials
+      const admin = install.admin;
+
+      // set api url
+      install.apiUrl = install.url + "api/";
+
+      // authenticate if admin credentials are provided
+      if (admin && admin.email != "" && admin.password != "") {
+        request.post(
+          install.url + "autenticacao/login",
+          { form: admin },
+          function(err, res) {
+            if (err) return doneRunImport(err);
+            else fetchInstallData(install, doneInstall);
+          }
+        );
+      } else {
+        fetchInstallData(install, doneInstall);
+      }
+    },
+    doneRunImport
+  );
 }
 
 /*
@@ -53,6 +69,7 @@ function fetchInstallData(install, doneFetchInstallData) {
   async.eachSeries(
     elementTypes,
     function(type, doneType) {
+      console.log(`Looking for ${type}s...`);
       fetchTypeData(install, type, doneType);
     },
     doneFetchInstallData
@@ -72,7 +89,7 @@ function fetchTypeData(install, type, doneFetchElementType) {
       page++;
       request(
         {
-          uri: install.url + type + "/find",
+          uri: install.apiUrl + type + "/find",
           qs: {
             "@SELECT": "*",
             "@LIMIT": limitPerPage,
@@ -83,7 +100,12 @@ function fetchTypeData(install, type, doneFetchElementType) {
           if (err) return next(err);
           else {
             // parse result
-            var result = JSON.parse(res.body);
+            try {
+              var result = JSON.parse(res.body);
+            } catch (e) {
+              console.log("Error parsing response.");
+              return next(e);
+            }
 
             // append to data
             data = data.concat(result);

@@ -21,10 +21,12 @@ A primeira execução será mais demorada porque serão baixadas as imagens do [
 
 # Obtendo dados das instalações
 
-No diretório do repositório, instale as dependências com o `npm install` e rode `npm run update`.
+1. Edite o arquivo `config.json` a partir do modelo `config.example.json` com url e credenticias de acesso instalações desejadas;
+2. Instale as dependências com executando `npm install`;
+3. Inicie o processo de importação com `npm run update`.
 
 # Referências
 
 Mapas Culturais:
-- [ API](https://github.com/hacklabr/mapasculturais/blob/develop/documentation/docs/mc_config_api.md)
+- [API](https://github.com/hacklabr/mapasculturais/blob/develop/documentation/docs/mc_config_api.md)
 - [código-fonte](https://github.com/hacklabr/mapasculturais)

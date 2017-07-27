@@ -1,0 +1,20 @@
+{
+  "installs": [
+    {
+      "name": "ceara",
+      "url": "http://mapa.cultura.ce.gov.br/api/",
+      "admin": {
+        "email": "",
+        "password": ""
+      }
+    },
+    {
+      "name": "spcultura",
+      "url": "http://spcultura.prefeitura.sp.gov.br/api/",
+      "admin": {
+        "user": "",
+        "password": ""
+      }
+    }
+  ]
+}
