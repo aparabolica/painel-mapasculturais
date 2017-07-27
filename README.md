@@ -6,7 +6,7 @@
 
 Para rodar é necessário instalar o [software de virtualização Docker](https://www.docker.com). Ele está disponível para [Linux](https://www.docker.com/docker-ubuntu), [Mac](https://www.docker.com/docker-mac) ou [Windows](https://www.docker.com/docker-windows), no caso do Linux é necessário instalar também o [ docker-compose](https://docs.docker.com/compose/install). Também é necessário instalar o [Node.js](https://nodejs.org/en/download/).
 
-Após instalar o Docker, [baixe este repositório]() e descompacte em um diretório de trabalho. No terminal, execute o comando no diretório base do repositório:
+Após instalar o Docker, [baixe este repositório](https://github.com/aparabolica/painel-mapasculturais/archive/master.zip) e descompacte em um diretório de trabalho. No terminal, execute o comando no diretório base do repositório:
 
 ```
 docker-compose up
