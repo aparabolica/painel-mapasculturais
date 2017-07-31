@@ -13,6 +13,7 @@
   "license": "MIT",
   "dependencies": {
     "async": "^2.5.0",
+    "lodash": "^4.17.4",
     "mongodb": "^2.2.30",
     "replay": "^2.1.2",
     "request": "^2.81.0"

@@ -2,7 +2,7 @@
   "installs": [
     {
       "name": "ceara",
-      "url": "http://mapa.cultura.ce.gov.br/api/",
+      "url": "http://mapa.cultura.ce.gov.br/",
       "admin": {
         "email": "",
         "password": ""
@@ -10,7 +10,7 @@
     },
     {
       "name": "spcultura",
-      "url": "http://spcultura.prefeitura.sp.gov.br/api/",
+      "url": "http://spcultura.prefeitura.sp.gov.br/",
       "admin": {
         "user": "",
         "password": ""
