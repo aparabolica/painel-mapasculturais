@@ -1,5 +1,6 @@
 node_modules
 fixtures
 *.log
-data/mongodb
 config.json
+dumps
+data
