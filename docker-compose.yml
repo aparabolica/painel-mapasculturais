@@ -6,13 +6,27 @@ services:
       - ./data/mongodb:/data
     ports:
       - 27018:27017
+  postgresql:
+    image: postgres
+    volumes:
+      - ./data/postgresql:/data
+    environment:
+      - POSTGRES_USER=painelmc
+    ports:
+      - 15432:5432
   metabase:
     image: metabase/metabase
     environment:
-      - MB_DB_FILE=/data/metabase.db
+      - MB_DB_TYPE=postgres
+      - MB_DB_DBNAME=painelmc
+      - MB_DB_PORT=5432
+      - MB_DB_USER=postgres
+      - MB_DB_PASS=
+      - MB_DB_HOST=postgresql
     volumes:
       - ./data/metabase:/data
     ports:
       - 3000:3000
     links:
       - mongodb
+      - postgresql

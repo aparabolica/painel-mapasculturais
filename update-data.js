@@ -1,12 +1,13 @@
 const replay = require("replay");
 const _ = require("lodash");
+const moment = require("moment");
 var request = require("request").defaults({ jar: true });
 const async = require("async");
 const elementTypes = ["agent", "space", "project", "event"];
 
 const installs = require("./config.json").installs;
 
-const mongodbConnectionString = "mongodb://localhost:27018/mapasculturais";
+const mongodbConnectionString = "mongodb://localhost:27018/painelmc";
 const limitPerPage = 300;
 
 /*
@@ -169,14 +170,21 @@ function normalizeName(type, input) {
  * Prepare data
  */
 function preprocessData(install, type, data) {
+  console.log("Pre-processing...");
   return _.map(data, function(d) {
     d.createdAt = new Date(d.createTimestamp.date);
     d.updatedAt = d.updateTimestamp ? new Date(d.updateTimestamp.date) : null;
     d.city = normalizeName("city", d["En_Municipio"] || d["geoMunicipio"]);
-    d.district = normalizeName(
-      `district_${install.name}`,
-      d["geoDistrito"] || d["En_Bairro"]
-    );
+    d.district = normalizeName(`district_${install.name}`, d["geoDistrito"]);
+
+    d.race = d.raca != null || d.raca != "" ? d.raca : null;
+    d.gender = d.genero != null || d.genero != "" ? d.genero : null;
+    d.type = d.type && d.type.name;
+
+    if (d.dataDeNascimento) {
+      d.birthday = d.dataDeNascimento ? new Date(d.dataDeNascimento) : null;
+      d.age = moment().diff(moment(d.dataDeNascimento), "years");
+    }
 
     return d;
   });
@@ -220,18 +228,107 @@ function importData(install, type, data, doneImportData) {
 function postprocessData(install, donePostprocessData) {
   console.log(`Post-processing ${install.name}...`);
 
-  dbConnection.collection(`${install.name}-agents`).aggregate([
-    { $match: {} },
-    {
-      $group: {
-        _id: "$userId",
-        createdAt: { $min: "$createdAt" },
-        agents: { $push: "$id" },
-        agentCount: { $sum: 1 }
+  async.series(
+    [
+      function(doneEach) {
+        // unwind languages in a specific collection
+        dbConnection.collection(`${install.name}-agents`).aggregate(
+          [
+            { $match: { "terms.area": { $ne: [] } } },
+            {
+              $project: {
+                _id: 0,
+                district: 1,
+                gender: 1,
+                age: 1,
+                agentType: "$type",
+                language: "$terms.area",
+                tag: "$terms.tag"
+              }
+            },
+            { $unwind: "$language" },
+            { $out: `${install.name}-agents-languages` }
+          ],
+          doneEach
+        );
+      },
+      function(doneEach) {
+        // unwind languages in a specific collection
+        dbConnection.collection(`${install.name}-agents`).aggregate(
+          [
+            { $match: { "terms.tag": { $ne: [] } } },
+            {
+              $project: {
+                _id: 0,
+                district: 1,
+                gender: 1,
+                age: 1,
+                agentType: "$type",
+                tag: "$terms.tag"
+              }
+            },
+            { $unwind: "$tag" },
+            { $out: `${install.name}-agents-tags` }
+          ],
+          doneEach
+        );
+      },
+      function(doneEach) {
+        // unwind languages in a specific collection
+        dbConnection.collection(`${install.name}-agents-languages`).aggregate(
+          [
+            {
+              $match: {}
+            },
+            {
+              $project: {
+                _id: 0,
+                language: 1,
+                agentType: 1,
+                gender: 1,
+                tag: 1
+              }
+            },
+            { $unwind: "$tag" },
+            { $out: `${install.name}-agents-language-tags` }
+          ],
+          doneEach
+        );
+      },
+      function(doneEach) {
+        // aggregate users by userId in agents collection
+        dbConnection.collection(`${install.name}-agents`).aggregate(
+          [
+            {
+              $project: {
+                _id: 1,
+                id: 1,
+                userId: 1,
+                createdAt: 1,
+                individuals: {
+                  $cond: [{ $eq: ["$type", "Individual"] }, 1, 0]
+                },
+                collectives: {
+                  $cond: [{ $eq: ["$type", "Coletivo"] }, 1, 0]
+                }
+              }
+            },
+            {
+              $group: {
+                _id: "$userId",
+                createdAt: { $min: "$createdAt" },
+                agents: { $push: "$_id" },
+                agentsCount: { $sum: 1 },
+                individualsCount: { $sum: "$individuals" },
+                collectivesCount: { $sum: "$collectives" }
+              }
+            },
+            { $out: `${install.name}-users` }
+          ],
+          doneEach
+        );
       }
-    },
-    { $out: `${install.name}-users` }
-  ], function(err) {
-    donePostprocessData(err);
-  });
+    ],
+    donePostprocessData
+  );
 }
