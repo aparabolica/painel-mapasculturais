@@ -67,11 +67,10 @@ function runImport(doneRunImport) {
  */
 
 function fetchInstallData(install, doneFetchInstallData) {
-  console.log(`Fetching data from ${install.name}...`);
+  console.log(`Fetching data from ${install.url}`);
   async.eachSeries(
     elementTypes,
     function(type, doneType) {
-      console.log(`Looking for ${type}s...`);
       fetchTypeData(install, type, doneType);
     },
     doneFetchInstallData
@@ -170,20 +169,35 @@ function normalizeName(type, input) {
  * Prepare data
  */
 function preprocessData(install, type, data) {
-  console.log("Pre-processing...");
+  console.log("Parsing...");
   return _.map(data, function(d) {
+    d._id = d.id;
     d.createdAt = new Date(d.createTimestamp.date);
     d.updatedAt = d.updateTimestamp ? new Date(d.updateTimestamp.date) : null;
-    d.city = normalizeName("city", d["En_Municipio"] || d["geoMunicipio"]);
-    d.district = normalizeName(`district_${install.name}`, d["geoDistrito"]);
-
-    d.race = d.raca != null || d.raca != "" ? d.raca : null;
-    d.gender = d.genero != null || d.genero != "" ? d.genero : null;
     d.type = d.type && d.type.name;
 
-    if (d.dataDeNascimento) {
+    if (_.includes(["agent", "space"], type)) {
+      d.city = normalizeName("city", d["En_Municipio"] || d["geoMunicipio"]);
+      d.district = normalizeName(`district_${install.name}`, d["geoDistrito"]);
+    }
+
+    if (type == "agent") {
+      d.race = d.raca != null || d.raca != "" ? d.raca : null;
+      d.gender = d.genero != null || d.genero != "" ? d.genero : null;
       d.birthday = d.dataDeNascimento ? new Date(d.dataDeNascimento) : null;
-      d.age = moment().diff(moment(d.dataDeNascimento), "years");
+      d.age = d.birthday
+        ? moment().diff(moment(d.dataDeNascimento), "years")
+        : null;
+    }
+
+    if (type == "space") {
+      d.subspacesCount = d.children ? d.children.length : 0;
+      d.acessibilidade = d.acessibilidade == "Sim" || d.acessibilidade == "Não"
+        ? d.acessibilidade
+        : "Não declarada";
+      d.acessibilidade_fisica = d.acessibilidade_fisica
+        ? d.acessibilidade_fisica.split(";")
+        : null;
     }
 
     return d;
@@ -195,31 +209,22 @@ function preprocessData(install, type, data) {
  */
 
 function importData(install, type, data, doneImportData) {
-  console.log(`Importing ${type}s...`);
-
   data = preprocessData(install, type, data);
 
   var collection = dbConnection.collection(`${install.name}-${type}s`);
 
-  collection.createIndex("_id");
+  console.log(`Cleaning up...`);
+  collection.remove({}, function(err, result) {
+    if (err) return doneImportData(err);
 
-  async.eachSeries(
-    data,
-    function(item, doneUpdateItem) {
-      item._id = item.id;
-      collection.updateOne(
-        { _id: item.id },
-        item,
-        { upsert: true },
-        doneUpdateItem
-      );
-    },
-    function(err) {
-      if (err) doneImportData(err);
-      else console.log(`Imported ${data.length} ${type}s.`);
+    console.log("Inserting...");
+    collection.insertMany(data, function(err, result) {
+      if (err) return doneImportData(err);
+
+      console.log(`Imported ${result.insertedCount} ${type}s.`);
       postprocessData(install, doneImportData);
-    }
-  );
+    });
+  });
 }
 
 /*
@@ -324,6 +329,83 @@ function postprocessData(install, donePostprocessData) {
               }
             },
             { $out: `${install.name}-users` }
+          ],
+          doneEach
+        );
+      },
+      function(doneEach) {
+        // unwind areas in a specific collection
+        dbConnection.collection(`${install.name}-spaces`).aggregate(
+          [
+            { $match: { "terms.area": { $ne: [] } } },
+            {
+              $project: {
+                _id: 0,
+                district: 1,
+                spaceType: "$type",
+                activity: "$terms.area",
+                tag: "$terms.tag"
+              }
+            },
+            { $unwind: "$activity" },
+            { $out: `${install.name}-spaces-activities` }
+          ],
+          doneEach
+        );
+      },
+      function(doneEach) {
+        // this step denormalize space's owner
+
+        // get collections
+        const agentsCollection = dbConnection.collection(
+          `${install.name}-agents`
+        );
+        const spacesCollection = dbConnection.collection(
+          `${install.name}-spaces`
+        );
+
+        // get list of spaces
+        spacesCollection
+          .find({ owner: { $ne: null } }, { _id: 1, owner: 1 })
+          .toArray(function(err, spaces) {
+            // iterate over spaces
+            async.eachSeries(
+              spaces,
+              function(space, doneEachSeries) {
+                // get owner
+                agentsCollection.findOne({ _id: space.owner }, function(
+                  err,
+                  owner
+                ) {
+                  // attach owner to space
+                  spacesCollection.update(
+                    { _id: space._id },
+                    { $set: { ownerId: space.owner, owner: owner } },
+                    doneEachSeries
+                  );
+                });
+              },
+              doneEach
+            );
+          });
+      },
+      function(doneEach) {
+        // unwind areas in a specific collection
+        dbConnection.collection(`${install.name}-spaces`).aggregate(
+          [
+            { $match: { acessibilidade_fisica: { $ne: [] } } },
+            {
+              $project: {
+                _id: 0,
+                district: 1,
+                capacity: 1,
+                city: 1,
+                type: 1,
+                acessibilidade_fisica: 1
+              }
+            },
+            { $unwind: "$acessibilidade_fisica" },
+            { $out: `${install.name}-spaces-accessibility` }
           ],
           doneEach
         );
