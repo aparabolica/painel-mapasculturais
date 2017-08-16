@@ -85,6 +85,14 @@ function fetchTypeData(install, type, doneFetchElementType) {
   var page = 0;
   var data = [];
 
+  var selectFields = {
+    agent: "*",
+    event:
+      "id,createTimestamp,owner,project,classificaoEtaria,occurrences.{id,space,rule},terms,type,registrationInfo,preco,traducaoLibras,descricaoSonora,site,facebook,twitter,googleplus,instagram",
+    space: "*",
+    project: "*"
+  };
+
   async.doUntil(
     function(next) {
       page++;
@@ -92,7 +100,7 @@ function fetchTypeData(install, type, doneFetchElementType) {
         {
           uri: install.apiUrl + type + "/find",
           qs: {
-            "@SELECT": "*",
+            "@SELECT": selectFields[type],
             "@LIMIT": limitPerPage,
             "@PAGE": page
           }
@@ -349,6 +357,26 @@ function postprocessData(install, donePostprocessData) {
             },
             { $unwind: "$activity" },
             { $out: `${install.name}-spaces-activities` }
+          ],
+          doneEach
+        );
+      },
+      function(doneEach) {
+        // unwind areas in a specific collection
+        dbConnection.collection(`${install.name}-spaces-activities`).aggregate(
+          [
+            { $match: { "terms.area": { $ne: [] } } },
+            {
+              $project: {
+                _id: 0,
+                district: 1,
+                spaceType: 1,
+                activity: 1,
+                tag: 1
+              }
+            },
+            { $unwind: "$tag" },
+            { $out: `${install.name}-spaces-activities-tags` }
           ],
           doneEach
         );
