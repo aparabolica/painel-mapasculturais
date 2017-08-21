@@ -209,6 +209,13 @@ function preprocessData(install, type, data) {
     }
 
     if (type == "event") {
+      d.traducaoLibras = d.traducaoLibras == "Sim" || d.traducaoLibras == "Não"
+        ? d.traducaoLibras
+        : "Não declarada";
+      d.descricaoSonora = d.descricaoSonora == "Sim" ||
+        d.descricaoSonora == "Não"
+        ? d.descricaoSonora
+        : "Não declarada";
       d.occurrences = _.map(d.occurrences, function(o) {
         if (o.space) {
           o.city = normalizeName(
@@ -422,6 +429,8 @@ function postprocessData(install, donePostprocessData) {
                   err,
                   owner
                 ) {
+                  if (err) return doneEachSeries(err);
+
                   // attach owner to space
                   spacesCollection.update(
                     { _id: space._id },
@@ -456,6 +465,44 @@ function postprocessData(install, donePostprocessData) {
         );
       },
       function(doneEach) {
+        // get collections
+        const agentsCollection = dbConnection.collection(
+          `${install.name}-agents`
+        );
+        const eventsCollection = dbConnection.collection(
+          `${install.name}-events`
+        );
+
+        // get list of agentes
+        eventsCollection
+          .find({ owner: { $ne: null } }, { _id: 1, owner: 1 })
+          .toArray(function(err, events) {
+            // iterate over events
+            async.eachSeries(
+              events,
+              function(event, doneEachSeries) {
+                // get owner
+                agentsCollection.findOne({ _id: event.owner }, function(
+                  err,
+                  owner
+                ) {
+                  if (err) return doneEachSeries(err);
+
+                  owner = _.pick(owner, ["name", "type"]);
+
+                  // attach owner to event
+                  eventsCollection.update(
+                    { _id: event._id },
+                    { $set: { ownerId: event.owner, owner: owner } },
+                    doneEachSeries
+                  );
+                });
+              },
+              doneEach
+            );
+          });
+      },
+      function(doneEach) {
         // unwind occurrences
         dbConnection.collection(`${install.name}-events`).aggregate(
           [
@@ -464,6 +511,10 @@ function postprocessData(install, donePostprocessData) {
               $project: {
                 _id: 0,
                 eventId: "$_id",
+                ownerId: 1,
+                owner: 1,
+                descricaoSonora: 1,
+                traducaoLibras: 1,
                 terms: 1,
                 occurrences: 1
               }
@@ -483,6 +534,11 @@ function postprocessData(install, donePostprocessData) {
               $project: {
                 _id: 0,
                 eventId: 1,
+                ownerId: 1,
+                owner: 1,
+                descricaoSonora: 1,
+                traducaoLibras: 1,
+                spaceId: 1,
                 city: "$occurrences.city",
                 district: "$occurrences.district",
                 language: "$terms.linguagem",
@@ -496,13 +552,47 @@ function postprocessData(install, donePostprocessData) {
                 price: "$occurrences.rule.price",
                 endsAt: "$occurrences.rule.endsAt",
                 price: "$occurrences.rule.price",
-                space: "$occurrences.space"
+                spaceId: "$occurrences.rule.spaceId"
               }
             },
             { $out: `${install.name}-occurrences` }
           ],
           doneEach
         );
+      },
+      function(doneEach) {
+        // get collections
+        const spacesCollection = dbConnection.collection(
+          `${install.name}-spaces`
+        );
+        const occurrencesCollection = dbConnection.collection(
+          `${install.name}-occurrences`
+        );
+
+        occurrencesCollection
+          .find({ spaceId: { $ne: null } }, { _id: 1, spaceId: 1 })
+          .toArray(function(err, occurrences) {
+            async.eachSeries(
+              occurrences,
+              function(occurrence, doneEachSeries) {
+                spacesCollection.findOne(
+                  { _id: parseInt(occurrence.spaceId) },
+                  function(err, space) {
+                    if (err) return doneEachSeries(err);
+
+                    space = _.pick(space, ["_id", "type", "name"]);
+
+                    occurrencesCollection.update(
+                      { _id: occurrence._id },
+                      { $set: { space: space } },
+                      doneEachSeries
+                    );
+                  }
+                );
+              },
+              doneEach
+            );
+          });
       },
       function(doneEach) {
         // flatten occurrences
@@ -513,6 +603,12 @@ function postprocessData(install, donePostprocessData) {
               $project: {
                 _id: 0,
                 eventId: 1,
+                ownerId: 1,
+                owner: 1,
+                descricaoSonora: 1,
+                traducaoLibras: 1,
+                space: 1,
+                spaceId: 1,
                 city: 1,
                 district: 1,
                 language: 1,
@@ -532,6 +628,43 @@ function postprocessData(install, donePostprocessData) {
           ],
           doneEach
         );
+      },
+      function(doneEach) {
+        // flatten occurrences
+        dbConnection
+          .collection(`${install.name}-occurrences-languages`)
+          .aggregate(
+            [
+              { $match: { occurrences: { $ne: [] } } },
+              {
+                $project: {
+                  _id: 0,
+                  eventId: 1,
+                  ownerId: 1,
+                  owner: 1,
+                  descricaoSonora: 1,
+                  traducaoLibras: 1,
+                  space: 1,
+                  spaceId: 1,
+                  city: 1,
+                  district: 1,
+                  language: 1,
+                  tag: 1,
+                  startsAt: 1,
+                  duration: 1,
+                  frequency: 1,
+                  startsOn: 1,
+                  until: 1,
+                  price: 1,
+                  endsAt: 1,
+                  price: 1
+                }
+              },
+              { $unwind: "$tag" },
+              { $out: `${install.name}-occurrences-languages-tags` }
+            ],
+            doneEach
+          );
       }
     ],
     donePostprocessData
