@@ -88,7 +88,7 @@ function fetchTypeData(install, type, doneFetchElementType) {
   var selectFields = {
     agent: "*",
     event:
-      "id,createTimestamp,owner,project,classificaoEtaria,occurrences.{id,space,rule},terms,type,registrationInfo,preco,traducaoLibras,descricaoSonora,site,facebook,twitter,googleplus,instagram",
+      "id,createTimestamp,owner,project,classificaoEtaria,occurrences.{id,space.{*},rule},terms,type,registrationInfo,preco,traducaoLibras,descricaoSonora,site,facebook,twitter,googleplus,instagram",
     space: "*",
     project: "*"
   };
@@ -206,6 +206,23 @@ function preprocessData(install, type, data) {
       d.acessibilidade_fisica = d.acessibilidade_fisica
         ? d.acessibilidade_fisica.split(";")
         : null;
+    }
+
+    if (type == "event") {
+      d.occurrences = _.map(d.occurrences, function(o) {
+        if (o.space) {
+          o.city = normalizeName(
+            "city",
+            o.space["En_Municipio"] || o.space["geoMunicipio"]
+          );
+          o.district = normalizeName(
+            `district_${install.name}`,
+            o.space["geoDistrito"]
+          );
+          delete o.space;
+        }
+        return o;
+      });
     }
 
     return d;
@@ -418,7 +435,7 @@ function postprocessData(install, donePostprocessData) {
           });
       },
       function(doneEach) {
-        // unwind areas in a specific collection
+        // unwind accessibility of spaces
         dbConnection.collection(`${install.name}-spaces`).aggregate(
           [
             { $match: { acessibilidade_fisica: { $ne: [] } } },
@@ -434,6 +451,84 @@ function postprocessData(install, donePostprocessData) {
             },
             { $unwind: "$acessibilidade_fisica" },
             { $out: `${install.name}-spaces-accessibility` }
+          ],
+          doneEach
+        );
+      },
+      function(doneEach) {
+        // unwind occurrences
+        dbConnection.collection(`${install.name}-events`).aggregate(
+          [
+            { $match: { occurrences: { $ne: [] } } },
+            {
+              $project: {
+                _id: 0,
+                eventId: "$_id",
+                terms: 1,
+                occurrences: 1
+              }
+            },
+            { $unwind: "$occurrences" },
+            { $out: `${install.name}-occurrences` }
+          ],
+          doneEach
+        );
+      },
+      function(doneEach) {
+        // flatten occurrences
+        dbConnection.collection(`${install.name}-occurrences`).aggregate(
+          [
+            { $match: { occurrences: { $ne: [] } } },
+            {
+              $project: {
+                _id: 0,
+                eventId: 1,
+                city: "$occurrences.city",
+                district: "$occurrences.district",
+                language: "$terms.linguagem",
+                tag: "$terms.tag",
+                _id: "$occurrences.id",
+                startsAt: "$occurrences.rule.startsAt",
+                duration: "$occurrences.rule.duration",
+                frequency: "$occurrences.rule.frequency",
+                startsOn: "$occurrences.rule.startsOn",
+                until: "$occurrences.rule.until",
+                price: "$occurrences.rule.price",
+                endsAt: "$occurrences.rule.endsAt",
+                price: "$occurrences.rule.price",
+                space: "$occurrences.space"
+              }
+            },
+            { $out: `${install.name}-occurrences` }
+          ],
+          doneEach
+        );
+      },
+      function(doneEach) {
+        // flatten occurrences
+        dbConnection.collection(`${install.name}-occurrences`).aggregate(
+          [
+            { $match: { occurrences: { $ne: [] } } },
+            {
+              $project: {
+                _id: 0,
+                eventId: 1,
+                city: 1,
+                district: 1,
+                language: 1,
+                tag: 1,
+                startsAt: 1,
+                duration: 1,
+                frequency: 1,
+                startsOn: 1,
+                until: 1,
+                price: 1,
+                endsAt: 1,
+                price: 1
+              }
+            },
+            { $unwind: "$language" },
+            { $out: `${install.name}-occurrences-languages` }
           ],
           doneEach
         );
