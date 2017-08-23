@@ -228,8 +228,13 @@ function preprocessData(install, type, data) {
           );
           delete o.space;
         }
+        d.occurrenceCount = d.occurrences.length;
         return o;
       });
+    }
+
+    if (type == "project") {
+      d.eventCount = d.events ? d.events.length : 0;
     }
 
     return d;
