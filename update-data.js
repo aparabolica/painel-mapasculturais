@@ -186,7 +186,10 @@ function preprocessData(install, type, data) {
 
     if (_.includes(["agent", "space"], type)) {
       d.city = normalizeName("city", d["En_Municipio"] || d["geoMunicipio"]);
-      d.district = normalizeName(`district_${install.name}`, d["geoDistrito"]);
+      d.district = normalizeName(
+        `district_${install.name}`,
+        d["geoDistrito"] || d["En_Bairro"]
+      );
     }
 
     if (type == "agent") {
@@ -273,7 +276,7 @@ function postprocessData(install, donePostprocessData) {
   async.series(
     [
       function(doneEach) {
-        // unwind languages in a specific collection
+        // unwind languages
         dbConnection.collection(`${install.name}-agents`).aggregate(
           [
             { $match: { "terms.area": { $ne: [] } } },
@@ -295,7 +298,7 @@ function postprocessData(install, donePostprocessData) {
         );
       },
       function(doneEach) {
-        // unwind languages in a specific collection
+        // unwind tags
         dbConnection.collection(`${install.name}-agents`).aggregate(
           [
             { $match: { "terms.tag": { $ne: [] } } },
@@ -316,7 +319,7 @@ function postprocessData(install, donePostprocessData) {
         );
       },
       function(doneEach) {
-        // unwind languages in a specific collection
+        // unwind tags from language
         dbConnection.collection(`${install.name}-agents-languages`).aggregate(
           [
             {
@@ -371,7 +374,7 @@ function postprocessData(install, donePostprocessData) {
         );
       },
       function(doneEach) {
-        // unwind areas in a specific collection
+        // unwind activity
         dbConnection.collection(`${install.name}-spaces`).aggregate(
           [
             { $match: { "terms.area": { $ne: [] } } },
@@ -391,7 +394,7 @@ function postprocessData(install, donePostprocessData) {
         );
       },
       function(doneEach) {
-        // unwind areas in a specific collection
+        // unwind tags
         dbConnection.collection(`${install.name}-spaces-activities`).aggregate(
           [
             { $match: { "terms.area": { $ne: [] } } },
@@ -585,11 +588,11 @@ function postprocessData(install, donePostprocessData) {
                   function(err, space) {
                     if (err) return doneEachSeries(err);
 
-                    space = _.pick(space, ["_id", "type", "name"]);
+                    space = _.pick(space, ["_id", "type", "name", "district"]);
 
                     occurrencesCollection.update(
                       { _id: occurrence._id },
-                      { $set: { space: space } },
+                      { $set: { district: space.district, space: space } },
                       doneEachSeries
                     );
                   }
